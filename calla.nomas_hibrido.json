@@ -11,10 +11,42 @@
       "url": "https://www.tiktok.com/@calla.nomas/video/7698763177500183809",
       "fecha": "2026-10-20 09:53",
       "descripcion": "Los compañeros que te tocaban en la universidad @ChatoOe 🇪🇨 ",
-      "vistas": 63700,
-      "likes": 5765,
+      "vistas": 63800,
+      "likes": 5773,
       "comentarios": 104,
-      "compartidos": 849
+      "compartidos": 849,
+      "primeros_comentarios": [
+        {
+          "texto": "JAJAJAJ yo todavía soy virgen 😔",
+          "likes": 285,
+          "fecha": "2026-10-20 10:01",
+          "autor": "chatooe"
+        },
+        {
+          "texto": "En la modalidad a distancia.. 😂😂",
+          "likes": 10,
+          "fecha": "2026-10-20 19:20",
+          "autor": "stefyaltamirano8"
+        },
+        {
+          "texto": "se pasan jaaa",
+          "likes": 26,
+          "fecha": "2026-10-20 11:22",
+          "autor": "pame88zambra"
+        },
+        {
+          "texto": "Eso del Patrón MEJIA...",
+          "likes": 9,
+          "fecha": "2026-10-20 13:05",
+          "autor": "mejia.tv"
+        },
+        {
+          "texto": "Jajja el chucho....",
+          "likes": 40,
+          "fecha": "2026-10-20 10:03",
+          "autor": "javierquishpe2016"
+        }
+      ]
     },
     {
       "url": "https://www.tiktok.com/@calla.nomas/video/7698402756591209735",
@@ -23,7 +55,39 @@
       "vistas": 26600,
       "likes": 2938,
       "comentarios": 31,
-      "compartidos": 404
+      "compartidos": 404,
+      "primeros_comentarios": [
+        {
+          "texto": "cualquiera menos ADN",
+          "likes": 47,
+          "fecha": "2026-10-19 12:54",
+          "autor": "geocondagaibor"
+        },
+        {
+          "texto": "",
+          "likes": 77,
+          "fecha": "2026-10-19 12:36",
+          "autor": "franciscocarvaja74"
+        },
+        {
+          "texto": "Parece chiste pero es anécdota 😂🤣",
+          "likes": 24,
+          "fecha": "2026-10-19 11:42",
+          "autor": "ricky.sb3"
+        },
+        {
+          "texto": "Gracias presidente por los CORTES DE LUZ, que los insensatos llaman \" Mantenimiento\"",
+          "likes": 15,
+          "fecha": "2026-10-19 11:53",
+          "autor": "luisacenteno5962"
+        },
+        {
+          "texto": "tan real",
+          "likes": 1,
+          "fecha": "2026-10-20 02:42",
+          "autor": "cristian.castro257"
+        }
+      ]
     },
     {
       "url": "https://www.tiktok.com/@calla.nomas/video/7698177736229096725",
@@ -32,25 +96,8 @@
       "vistas": 15200,
       "likes": 1038,
       "comentarios": 7,
-      "compartidos": 24
-    },
-    {
-      "url": "https://www.tiktok.com/@calla.nomas/video/7698031545365351686",
-      "fecha": "2026-10-18 10:34",
-      "descripcion": "El mecánico que cobra barato  @Importadora Alvarado ",
-      "vistas": 20100,
-      "likes": 1523,
-      "comentarios": 14,
-      "compartidos": 49
-    },
-    {
-      "url": "https://www.tiktok.com/@calla.nomas/video/7697656336556854546",
-      "fecha": "2026-10-17 10:18",
-      "descripcion": "Cuando no te hacen jugar pero te piden para el árbitro ",
-      "vistas": 136600,
-      "likes": 11900,
-      "comentarios": 62,
-      "compartidos": 1516
+      "compartidos": 24,
+      "primeros_comentarios": []
     }
   ]
 }

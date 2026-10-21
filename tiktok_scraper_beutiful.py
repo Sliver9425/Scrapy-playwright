@@ -1,15 +1,18 @@
 """
-Scraper HIBRIDO de TikTok: Playwright (carga la pagina y escucha respuestas)
-+ BeautifulSoup (analiza el HTML renderizado).
+Scraper HIBRIDO de TikTok: Playwright (navega y escucha respuestas de red)
++ BeautifulSoup (analiza el HTML renderizado del perfil).
 
 Uso:  python tiktok_scraper_hibrido.py usuario [cantidad_videos]
-Genera <usuario>_hibrido.json y <usuario>_hibrido.csv
+Genera:
+  <usuario>_hibrido.json                 perfil + videos + primeros comentarios
+  <usuario>_hibrido.csv                  una fila por video
+  <usuario>_hibrido_comentarios.csv      una fila por comentario
 
 Flujo:
-  1. Playwright abre el perfil con Chrome real y escucha la respuesta de red que la
-     propia pagina pide para llenar su cuadricula de videos (incluye las estadisticas).
-  2. BeautifulSoup lee del HTML renderizado los datos del perfil (seguidores, seguidos).
-  3. No se entra video por video: asi se evita el error 403 de las paginas de video.
+  1. Abre el perfil con Chrome real y captura la lista de videos con estadisticas.
+  2. BeautifulSoup lee del HTML renderizado los datos del perfil.
+  3. Para cada video: hace CLIC en el desde el perfil (no abre la URL directa, que da 403)
+     y captura la respuesta de red de los comentarios.
 Si aparece un captcha, resuélvelo en el navegador y presiona Enter en la terminal.
 """
 import csv
@@ -17,11 +20,14 @@ import json
 import sys
 import time
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 ID_JSON = "__UNIVERSAL_DATA_FOR_REHYDRATION__"
+NUM_COMENTARIOS = 5
+INCLUIR_AUTOR = True  # False = no guarda nombres de usuario de quienes comentan (privacidad)
 
 
 def pausa_captcha(mensaje):
@@ -60,26 +66,77 @@ def obtener_perfil(html):
     }
 
 
-def crear_escucha(capturados):
-    """Devuelve una funcion que guarda los videos de las respuestas de la lista de videos."""
+def crear_escucha(capturados, comentarios):
+    """Guarda videos (item_list) y comentarios (comment/list) de las respuestas de red."""
     def on_response(resp):
-        if "/api/post/item_list" not in resp.url or resp.status != 200:
+        if resp.status != 200:
             return
         try:
-            for item in resp.json().get("itemList") or []:
-                capturados[item["id"]] = item
+            if "/api/post/item_list" in resp.url:
+                for item in resp.json().get("itemList") or []:
+                    capturados[item["id"]] = item
+            elif "/api/comment/list" in resp.url:
+                vid = parse_qs(urlparse(resp.url).query).get("aweme_id", [None])[0]
+                lista = resp.json().get("comments") or []
+                if vid and lista and vid not in comentarios:
+                    comentarios[vid] = lista
         except Exception:
-            pass  # respuesta vacia o no JSON: se ignora
+            pass
     return on_response
 
 
 def esperar_videos(page, capturados, cantidad):
-    """Espera/scrollea hasta tener suficientes videos capturados."""
     for _ in range(8):
         if len(capturados) >= cantidad:
             return
         page.mouse.wheel(0, 3000)
         time.sleep(2.5)
+
+
+def abrir_video_con_clic(page, vid):
+    """Busca el enlace del video en la cuadrícula del perfil (con scroll) y le hace clic."""
+    for _ in range(6):
+        enlace = page.locator(f'a[href*="/video/{vid}"]')
+        if enlace.count():
+            enlace.first.scroll_into_view_if_needed()
+            enlace.first.click()
+            return True
+        page.mouse.wheel(0, 2500)
+        time.sleep(1.5)
+    return False
+
+
+def esperar_comentarios(comentarios, vid, timeout=12):
+    for _ in range(timeout * 2):
+        if vid in comentarios:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def volver_al_perfil(page):
+    page.go_back(wait_until="domcontentloaded")
+    try:
+        page.wait_for_selector('a[href*="/video/"]', timeout=10000)
+    except PWTimeout:
+        pass
+    time.sleep(2)
+
+
+def formatear_comentarios(lista):
+    salida = []
+    for c in lista[:NUM_COMENTARIOS]:
+        fila = {
+            "texto": c.get("text", ""),
+            "likes": c.get("digg_count"),
+            "fecha": "",
+        }
+        if c.get("create_time"):
+            fila["fecha"] = datetime.fromtimestamp(int(c["create_time"])).strftime("%Y-%m-%d %H:%M")
+        if INCLUIR_AUTOR:
+            fila["autor"] = (c.get("user") or {}).get("unique_id", "")
+        salida.append(fila)
+    return salida
 
 
 def item_a_fila(item, usuario):
@@ -88,6 +145,7 @@ def item_a_fila(item, usuario):
     if item.get("createTime"):
         fecha = datetime.fromtimestamp(int(item["createTime"])).strftime("%Y-%m-%d %H:%M")
     return {
+        "id": item["id"],
         "url": f"https://www.tiktok.com/@{usuario}/video/{item['id']}",
         "fecha": fecha,
         "descripcion": item.get("desc", ""),
@@ -99,17 +157,33 @@ def item_a_fila(item, usuario):
     }
 
 
-def guardar_csv(resultado, nombre_archivo):
+def guardar_csvs(resultado, nombre):
     perfil = resultado["perfil"]
-    columnas = ["usuario", "seguidores", "seguidos", "url", "fecha", "descripcion",
-                "vistas", "likes", "comentarios", "compartidos"]
     base = {"usuario": perfil["usuario"], "seguidores": perfil["seguidores"],
             "seguidos": perfil["seguidos"]}
-    filas = [{**base, **v} for v in resultado["ultimos_videos"]] or [base]
-    with open(f"{nombre_archivo}.csv", "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=columnas)
-        writer.writeheader()
-        writer.writerows(filas)
+
+    # CSV de videos (una fila por video; los primeros comentarios van unidos con " | ")
+    columnas = ["usuario", "seguidores", "seguidos", "url", "fecha", "descripcion",
+                "vistas", "likes", "comentarios", "compartidos", "primeros_comentarios"]
+    filas = []
+    for v in resultado["ultimos_videos"]:
+        textos = " | ".join(c["texto"] for c in v.get("primeros_comentarios", []))
+        fila = {**base, **{k: v.get(k) for k in columnas if k in v}}
+        fila["primeros_comentarios"] = textos
+        filas.append(fila)
+    with open(f"{nombre}.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=columnas, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(filas or [base])
+
+    # CSV de comentarios (una fila por comentario)
+    col_c = ["url_video", "texto", "likes", "fecha"] + (["autor"] if INCLUIR_AUTOR else [])
+    with open(f"{nombre}_comentarios.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=col_c, extrasaction="ignore")
+        w.writeheader()
+        for v in resultado["ultimos_videos"]:
+            for c in v.get("primeros_comentarios", []):
+                w.writerow({"url_video": v["url"], **c})
 
 
 def main():
@@ -119,17 +193,18 @@ def main():
         usuario = input("Usuario de TikTok a analizar (ej. @khaby.lame): ").strip().lstrip("@")
     cantidad = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 
-    capturados = {}  # id_video -> datos del video
+    capturados = {}   # id_video -> datos del video
+    comentarios = {}  # id_video -> lista cruda de comentarios
 
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
             user_data_dir="perfil_navegador",
-            channel="chrome",  # Google Chrome real instalado en la PC
+            channel="chrome",
             headless=False,
             locale="es-ES",
         )
         page = context.pages[0] if context.pages else context.new_page()
-        page.on("response", crear_escucha(capturados))  # antes de abrir el perfil
+        page.on("response", crear_escucha(capturados, comentarios))
 
         html = cargar_perfil(page, usuario)
         resultado = {"perfil": obtener_perfil(html), "ultimos_videos": []}
@@ -140,21 +215,37 @@ def main():
             page.reload(wait_until="domcontentloaded")
             esperar_videos(page, capturados, cantidad)
 
+        filas = [item_a_fila(it, usuario) for it in capturados.values()]
+        filas.sort(key=lambda f: f["_orden"], reverse=True)  # mas recientes primero
+        filas = filas[:cantidad]
+        print(f"Videos obtenidos: {len(filas)}")
+
+        # Comentarios: se abre cada video con clic desde el perfil
+        for fila in filas:
+            vid = fila["id"]
+            print(f"Comentarios de {fila['url']} ...")
+            if abrir_video_con_clic(page, vid):
+                if not esperar_comentarios(comentarios, vid):
+                    print("   No llegaron comentarios (¿captcha, sin comentarios o requiere login?)")
+                volver_al_perfil(page)
+            else:
+                print("   No se encontró el video en la cuadrícula del perfil")
+            fila["primeros_comentarios"] = formatear_comentarios(comentarios.get(vid, []))
+            time.sleep(2)
+
         context.close()
 
-    filas = [item_a_fila(it, usuario) for it in capturados.values()]
-    filas.sort(key=lambda f: f["_orden"], reverse=True)  # mas recientes primero (ignora fijados)
     for f in filas:
         f.pop("_orden")
-    resultado["ultimos_videos"] = filas[:cantidad]
-    print(f"Videos obtenidos: {len(resultado['ultimos_videos'])}")
+        f.pop("id")
+    resultado["ultimos_videos"] = filas
 
     print(json.dumps(resultado, indent=2, ensure_ascii=False))
     nombre = f"{usuario}_hibrido"
     with open(f"{nombre}.json", "w", encoding="utf-8") as f:
         json.dump(resultado, f, indent=2, ensure_ascii=False)
-    guardar_csv(resultado, nombre)
-    print(f"\nGuardado: {nombre}.json y {nombre}.csv")
+    guardar_csvs(resultado, nombre)
+    print(f"\nGuardado: {nombre}.json, {nombre}.csv y {nombre}_comentarios.csv")
 
 
 if __name__ == "__main__":
