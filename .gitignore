@@ -2,6 +2,4 @@ venv/
 perfil_navegador/
 __pycache__/
 *.pyc
-*.json
-*.csv
 .vscode/
