@@ -27,7 +27,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 ID_JSON = "__UNIVERSAL_DATA_FOR_REHYDRATION__"
 NUM_COMENTARIOS = 5
-INCLUIR_AUTOR = True  # False = no guarda nombres de usuario de quienes comentan (privacidad)
+INCLUIR_AUTOR = False  # False = no guarda nombres de usuario de quienes comentan (privacidad)
 
 
 def pausa_captcha(mensaje):
@@ -46,10 +46,23 @@ def cargar_perfil(page, usuario):
             if intento == 0:
                 pausa_captcha("No se encontraron los datos del perfil (posible captcha).")
                 page.reload(wait_until="domcontentloaded")
-    html = page.content()
-    if BeautifulSoup(html, "html.parser").find("script", id=ID_JSON) is None:
-        raise RuntimeError("La página no contiene los datos del perfil")
-    return html
+    # El <script> puede aparecer en el DOM antes de recibir TODO su contenido
+    # (JSON cortado). Se espera a que la página cargue y se reintenta hasta que el JSON esté completo.
+    try:
+        page.wait_for_load_state("load", timeout=20000)
+    except PWTimeout:
+        pass
+    for _ in range(15):
+        html = page.content()
+        tag = BeautifulSoup(html, "html.parser").find("script", id=ID_JSON)
+        if tag is not None and tag.string:
+            try:
+                json.loads(tag.string)
+                return html
+            except json.JSONDecodeError:
+                pass
+        time.sleep(1)
+    raise RuntimeError("No se pudo leer el JSON completo del perfil")
 
 
 def obtener_perfil(html):

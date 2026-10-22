@@ -3,3 +3,8 @@ perfil_navegador/
 __pycache__/
 *.pyc
 .vscode/
+audios/
+*.wav
+*.mp4
+*.mp3
+transcripciones.json
